@@ -17,16 +17,64 @@ class PedagogicalResponse {
     this.achievementSuggestion,
   });
 
+  factory PedagogicalResponse.fromBackendJson(Map<String, dynamic> json) {
+    final options = (json['options'] as List<dynamic>? ?? const [])
+        .map((item) => item.toString())
+        .toList();
+    final hint = json['hint']?.toString();
+    final nextStep = json['next_step']?.toString();
+
+    return PedagogicalResponse(
+      supportMode: json['is_stuck_detected'] as bool? ?? false,
+      emotionalTone: json['tone']?.toString() ?? 'acolhedor',
+      answer: json['message']?.toString() ?? '',
+      steps: [
+        if (hint != null && hint.trim().isNotEmpty) 'Pista: $hint',
+        if (nextStep != null && nextStep.trim().isNotEmpty) 'Próximo passo: $nextStep',
+      ],
+      questionForStudent: options.isNotEmpty
+          ? 'Escolha uma opção para continuar: ${options.join(' | ')}'
+          : 'Quer tentar responder com suas palavras?',
+      hintOptions: options,
+      achievementSuggestion: json['response_type']?.toString() == 'support'
+          ? 'Pediu ajuda antes de desistir'
+          : null,
+    );
+  }
+
+  factory PedagogicalResponse.fromLegacyJson(Map<String, dynamic> json) {
+    final steps = (json['steps'] as List<dynamic>? ?? const [])
+        .map((item) => item is Map<String, dynamic> ? item['text'].toString() : item.toString())
+        .toList();
+
+    return PedagogicalResponse(
+      supportMode: json['support_mode'] as bool? ?? false,
+      emotionalTone: json['emotional_tone']?.toString() ?? 'acolhedor',
+      answer: json['answer']?.toString() ?? '',
+      steps: steps,
+      questionForStudent: json['question_for_student']?.toString() ?? '',
+      hintOptions: (json['hint_options'] as List<dynamic>? ?? const [])
+          .map((item) => item.toString())
+          .toList(),
+      achievementSuggestion: json['achievement_suggestion']?.toString(),
+    );
+  }
+
   String toReadableText() {
-    final buffer = StringBuffer()
-      ..writeln(answer)
-      ..writeln();
-    for (final step in steps) {
-      buffer.writeln('• $step');
+    final buffer = StringBuffer();
+    if (answer.trim().isNotEmpty) {
+      buffer.writeln(answer.trim());
     }
-    buffer
-      ..writeln()
-      ..writeln(questionForStudent);
+    if (steps.isNotEmpty) {
+      if (buffer.isNotEmpty) buffer.writeln();
+      for (final step in steps) {
+        buffer.writeln('• $step');
+      }
+    }
+    if (questionForStudent.trim().isNotEmpty) {
+      if (buffer.isNotEmpty) buffer.writeln();
+      buffer.writeln(questionForStudent.trim());
+    }
     return buffer.toString().trim();
   }
 }

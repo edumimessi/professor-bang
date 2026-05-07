@@ -1,0 +1,1 @@
+"""Backend do Professor Bang."""

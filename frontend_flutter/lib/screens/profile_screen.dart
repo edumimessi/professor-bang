@@ -22,6 +22,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   late final TextEditingController math;
   late final TextEditingController triggers;
   late final TextEditingController strategies;
+  bool _isSaving = false;
 
   @override
   void initState() {
@@ -45,23 +46,42 @@ class _ProfileScreenState extends State<ProfileScreen> {
     super.dispose();
   }
 
-  void _save() {
-    if (!_formKey.currentState!.validate()) return;
-    context.read<AppState>().updateProfile(StudentProfile(
-          name: name.text,
-          age: int.tryParse(age.text) ?? 14,
-          difficultSubjects: subjects.text,
-          interests: interests.text,
-          readingLevel: reading.text,
-          mathLevel: math.text,
-          anxietyTriggers: triggers.text,
-          helpfulStrategies: strategies.text,
-        ));
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Perfil salvo localmente.')));
+  Future<void> _save() async {
+    if (!_formKey.currentState!.validate() || _isSaving) return;
+
+    final appState = context.read<AppState>();
+    appState.updateProfile(StudentProfile(
+      id: appState.remoteStudentId,
+      name: name.text.trim(),
+      age: int.tryParse(age.text) ?? 14,
+      difficultSubjects: subjects.text.trim(),
+      interests: interests.text.trim(),
+      readingLevel: reading.text.trim(),
+      mathLevel: math.text.trim(),
+      anxietyTriggers: triggers.text.trim(),
+      helpfulStrategies: strategies.text.trim(),
+    ));
+
+    setState(() => _isSaving = true);
+    try {
+      final saved = await appState.saveProfileToApi();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Perfil salvo no backend. ID da aluna: ${saved.id}.')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Perfil salvo no app, mas a API não respondeu: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final studentId = context.watch<AppState>().remoteStudentId;
     return CalmScaffold(
       title: 'Perfil da aluna',
       child: Form(
@@ -69,6 +89,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
         child: ListView(
           padding: const EdgeInsets.all(20),
           children: [
+            if (studentId != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.cloud_done),
+                    title: Text('Perfil conectado ao backend: ID $studentId'),
+                    subtitle: const Text('O chat usará este perfil para iniciar as sessões.'),
+                  ),
+                ),
+              ),
             _field(name, 'Nome'),
             _field(age, 'Idade', keyboardType: TextInputType.number),
             _field(subjects, 'Matérias com maior dificuldade'),
@@ -78,7 +109,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
             _field(triggers, 'Gatilhos de ansiedade'),
             _field(strategies, 'Estratégias que ajudam'),
             const SizedBox(height: 12),
-            ElevatedButton(onPressed: _save, child: const Text('Salvar perfil local')),
+            ElevatedButton.icon(
+              onPressed: _isSaving ? null : _save,
+              icon: _isSaving
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.save),
+              label: Text(_isSaving ? 'Salvando...' : 'Salvar no backend'),
+            ),
           ],
         ),
       ),
@@ -91,10 +132,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: TextFormField(
         controller: controller,
         keyboardType: keyboardType,
-        minLines: label.length > 12 ? 1 : 1,
+        minLines: 1,
         maxLines: label.length > 12 ? 3 : 1,
         validator: (value) => value == null || value.trim().isEmpty ? 'Preencha este campo com calma.' : null,
-        decoration: InputDecoration(labelText: label, filled: true, fillColor: Colors.white, border: const OutlineInputBorder()),
+        decoration: InputDecoration(
+          labelText: label,
+          filled: true,
+          fillColor: Colors.white,
+          border: const OutlineInputBorder(),
+        ),
       ),
     );
   }

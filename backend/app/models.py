@@ -1,88 +1,111 @@
-from datetime import datetime
+"""Modelos ORM do MVP Professor Bang."""
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from __future__ import annotations
 
-from app.db.session import Base
+from datetime import datetime, timezone
+
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy.orm import relationship
+
+from app.database import Base
+
+
+def utc_now() -> datetime:
+    """Retorna datetime UTC timezone-aware para campos temporais."""
+    return datetime.now(timezone.utc)
 
 
 class StudentProfile(Base):
-    __tablename__ = "student_profile"
+    __tablename__ = "student_profiles"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    name: Mapped[str] = mapped_column(String(120), nullable=False)
-    age: Mapped[int] = mapped_column(Integer, nullable=False)
-    difficult_subjects: Mapped[str] = mapped_column(Text, default="")
-    interests: Mapped[str] = mapped_column(Text, default="K-pop, dança, música, idiomas")
-    reading_level: Mapped[str] = mapped_column(String(80), default="iniciante")
-    math_level: Mapped[str] = mapped_column(String(80), default="iniciante")
-    anxiety_triggers: Mapped[str] = mapped_column(Text, default="")
-    helpful_strategies: Mapped[str] = mapped_column(Text, default="")
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(120), nullable=False, index=True)
+    age = Column(Integer, nullable=False)
+    difficult_subjects = Column(Text, default="")
+    interests = Column(Text, default="")
+    reading_level = Column(String(30), default="medio")
+    math_level = Column(String(30), default="basico")
+    anxiety_triggers = Column(Text, default="")
+    helpful_strategies = Column(Text, default="")
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
+
+    sessions = relationship("StudySession", back_populates="student", cascade="all, delete-orphan")
+    routine_tasks = relationship("RoutineTask", back_populates="student", cascade="all, delete-orphan")
+    achievements = relationship("Achievement", back_populates="student", cascade="all, delete-orphan")
+    emotional_checkins = relationship("EmotionalCheckin", back_populates="student", cascade="all, delete-orphan")
 
 
 class StudySession(Base):
     __tablename__ = "study_sessions"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    student_id: Mapped[int | None] = mapped_column(ForeignKey("student_profile.id"), nullable=True)
-    subject: Mapped[str] = mapped_column(String(120), default="geral")
-    mode: Mapped[str] = mapped_column(String(120), default="me_explica_devagar")
-    duration_minutes: Mapped[int] = mapped_column(Integer, default=0)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    id = Column(Integer, primary_key=True, index=True)
+    student_id = Column(Integer, ForeignKey("student_profiles.id", ondelete="CASCADE"), nullable=False, index=True)
+    subject = Column(String(80), nullable=False, index=True)
+    study_mode = Column(String(50), default="explicacao_guiada", nullable=False)
+    duration_minutes = Column(Integer, default=0, nullable=False)
+    stuck_count = Column(Integer, default=0, nullable=False)
+    error_count = Column(Integer, default=0, nullable=False)
+    notes = Column(Text, nullable=True)
+    started_at = Column(DateTime(timezone=True), default=utc_now, nullable=False, index=True)
+    ended_at = Column(DateTime(timezone=True), nullable=True)
 
-    messages: Mapped[list["Message"]] = relationship(back_populates="session")
+    student = relationship("StudentProfile", back_populates="sessions")
+    messages = relationship("Message", back_populates="session", cascade="all, delete-orphan")
+    emotional_checkins = relationship("EmotionalCheckin", back_populates="session", cascade="all, delete-orphan")
 
 
 class Message(Base):
     __tablename__ = "messages"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    session_id: Mapped[int | None] = mapped_column(ForeignKey("study_sessions.id"), nullable=True)
-    role: Mapped[str] = mapped_column(String(30), nullable=False)
-    content: Mapped[str] = mapped_column(Text, nullable=False)
-    structured_json: Mapped[str] = mapped_column(Text, default="{}")
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(Integer, ForeignKey("study_sessions.id", ondelete="CASCADE"), nullable=False, index=True)
+    content = Column(Text, nullable=False)
+    is_from_ai = Column(Boolean, default=False, nullable=False)
+    tone = Column(String(50), default="neutro", nullable=False)
+    stuck_detected = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False, index=True)
 
-    session: Mapped[StudySession | None] = relationship(back_populates="messages")
-
-
-class LearningObservation(Base):
-    __tablename__ = "learning_observations"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    student_id: Mapped[int | None] = mapped_column(ForeignKey("student_profile.id"), nullable=True)
-    subject: Mapped[str] = mapped_column(String(120), default="geral")
-    observation: Mapped[str] = mapped_column(Text, nullable=False)
-    strategy_that_helped: Mapped[str] = mapped_column(Text, default="")
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    session = relationship("StudySession", back_populates="messages")
 
 
 class EmotionalCheckin(Base):
     __tablename__ = "emotional_checkins"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    student_id: Mapped[int | None] = mapped_column(ForeignKey("student_profile.id"), nullable=True)
-    emotion: Mapped[str] = mapped_column(String(80), nullable=False)
-    intensity: Mapped[int] = mapped_column(Integer, default=1)
-    note: Mapped[str] = mapped_column(Text, default="")
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    id = Column(Integer, primary_key=True, index=True)
+    student_id = Column(Integer, ForeignKey("student_profiles.id", ondelete="CASCADE"), nullable=False, index=True)
+    session_id = Column(Integer, ForeignKey("study_sessions.id", ondelete="CASCADE"), nullable=False, index=True)
+    emotion = Column(String(80), nullable=False)
+    intensity = Column(Integer, default=3, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False, index=True)
+
+    student = relationship("StudentProfile", back_populates="emotional_checkins")
+    session = relationship("StudySession", back_populates="emotional_checkins")
 
 
 class RoutineTask(Base):
     __tablename__ = "routine_tasks"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    title: Mapped[str] = mapped_column(String(180), nullable=False)
-    is_done: Mapped[bool] = mapped_column(Boolean, default=False)
-    order_index: Mapped[int] = mapped_column(Integer, default=0)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    id = Column(Integer, primary_key=True, index=True)
+    student_id = Column(Integer, ForeignKey("student_profiles.id", ondelete="CASCADE"), nullable=False, index=True)
+    title = Column(String(180), nullable=False)
+    order_index = Column(Integer, default=0, nullable=False)
+    is_completed = Column(Boolean, default=False, nullable=False)
+    date = Column(DateTime(timezone=True), default=utc_now, nullable=False, index=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+
+    student = relationship("StudentProfile", back_populates="routine_tasks")
 
 
 class Achievement(Base):
     __tablename__ = "achievements"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    title: Mapped[str] = mapped_column(String(180), nullable=False)
-    description: Mapped[str] = mapped_column(Text, default="")
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    id = Column(Integer, primary_key=True, index=True)
+    student_id = Column(Integer, ForeignKey("student_profiles.id", ondelete="CASCADE"), nullable=False, index=True)
+    achievement_id = Column(String(80), nullable=False, index=True)
+    title = Column(String(160), nullable=False)
+    description = Column(Text, nullable=False)
+    emoji = Column(String(16), default="⭐", nullable=False)
+    earned_at = Column(DateTime(timezone=True), default=utc_now, nullable=False, index=True)
+
+    student = relationship("StudentProfile", back_populates="achievements")

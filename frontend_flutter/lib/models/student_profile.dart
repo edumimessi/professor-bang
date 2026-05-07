@@ -1,4 +1,5 @@
 class StudentProfile {
+  final int? id;
   final String name;
   final int age;
   final String difficultSubjects;
@@ -9,6 +10,7 @@ class StudentProfile {
   final String helpfulStrategies;
 
   const StudentProfile({
+    this.id,
     required this.name,
     required this.age,
     required this.difficultSubjects,
@@ -25,14 +27,40 @@ class StudentProfile {
       age: 14,
       difficultSubjects: 'Matemática e interpretação de texto',
       interests: 'K-pop, dança, música e idiomas',
-      readingLevel: 'frases curtas e concretas',
-      mathLevel: 'operações passo a passo',
+      readingLevel: 'medio',
+      mathLevel: 'basico',
       anxietyTriggers: 'pressa, texto longo e muitas etapas juntas',
       helpfulStrategies: 'pistas, exemplos simples e pausa para respirar',
     );
   }
 
+  factory StudentProfile.fromJson(Map<String, dynamic> json) {
+    return StudentProfile(
+      id: json['id'] as int?,
+      name: json['name']?.toString() ?? 'Duda',
+      age: json['age'] as int? ?? 14,
+      difficultSubjects: _joinList(json['difficult_subjects']),
+      interests: _joinList(json['interests']),
+      readingLevel: json['reading_level']?.toString() ?? 'medio',
+      mathLevel: json['math_level']?.toString() ?? 'basico',
+      anxietyTriggers: _joinList(json['anxiety_triggers']),
+      helpfulStrategies: _joinList(json['helpful_strategies']),
+    );
+  }
+
+  Map<String, dynamic> toApiJson() => {
+        'name': name,
+        'age': age,
+        'difficult_subjects': _splitList(difficultSubjects),
+        'interests': _splitList(interests),
+        'reading_level': readingLevel,
+        'math_level': mathLevel,
+        'anxiety_triggers': _splitList(anxietyTriggers),
+        'helpful_strategies': _splitList(helpfulStrategies),
+      };
+
   Map<String, dynamic> toMap() => {
+        'id': id,
         'name': name,
         'age': age,
         'difficultSubjects': difficultSubjects,
@@ -42,4 +70,19 @@ class StudentProfile {
         'anxietyTriggers': anxietyTriggers,
         'helpfulStrategies': helpfulStrategies,
       };
+
+  static List<String> _splitList(String value) {
+    return value
+        .split(RegExp(r'[,;\n]'))
+        .map((item) => item.trim())
+        .where((item) => item.isNotEmpty)
+        .toList();
+  }
+
+  static String _joinList(dynamic value) {
+    if (value is List) {
+      return value.map((item) => item.toString()).join(', ');
+    }
+    return value?.toString() ?? '';
+  }
 }

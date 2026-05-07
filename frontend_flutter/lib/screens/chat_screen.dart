@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
+import '../app/app_state.dart';
 import '../models/chat_message.dart';
-import '../services/local_pedagogy_service.dart';
 import '../widgets/calm_scaffold.dart';
 
 class ChatScreen extends StatefulWidget {
@@ -15,9 +16,10 @@ class ChatScreen extends StatefulWidget {
 
 class _ChatScreenState extends State<ChatScreen> {
   final _controller = TextEditingController();
-  final _service = LocalPedagogyService();
   late String _mode;
   final List<ChatMessage> _messages = [];
+  bool _isSending = false;
+  int? _sessionId;
 
   @override
   void initState() {
@@ -35,25 +37,62 @@ class _ChatScreenState extends State<ChatScreen> {
     super.dispose();
   }
 
-  void _send() {
+  Future<void> _send() async {
     final text = _controller.text.trim();
-    if (text.isEmpty) return;
-    final response = _service.respond(text: text, mode: _mode);
+    if (text.isEmpty || _isSending) return;
+
     setState(() {
+      _isSending = true;
       _messages.add(ChatMessage(role: ChatRole.student, text: text));
-      _messages.add(ChatMessage(
-        role: ChatRole.mentor,
-        text: response.toReadableText(),
-        supportMode: response.supportMode,
-      ));
-      if (response.achievementSuggestion != null) {
-        _messages.add(ChatMessage(
-          role: ChatRole.mentor,
-          text: 'Microvitória percebida: ${response.achievementSuggestion}.',
-        ));
-      }
       _controller.clear();
     });
+
+    try {
+      final appState = context.read<AppState>();
+      _sessionId ??= await appState.startStudySession(
+        subject: appState.profile.difficultSubjects.split(',').first.trim().isEmpty
+            ? 'geral'
+            : appState.profile.difficultSubjects.split(',').first.trim(),
+        studyMode: _mode,
+      );
+
+      final response = await appState.api.sendPedagogicalMessage(
+        sessionId: _sessionId!,
+        text: text,
+        mode: _mode,
+        subject: appState.profile.difficultSubjects.split(',').first.trim().isEmpty
+            ? 'geral'
+            : appState.profile.difficultSubjects.split(',').first.trim(),
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _messages.add(ChatMessage(
+          role: ChatRole.mentor,
+          text: response.toReadableText(),
+          supportMode: response.supportMode,
+        ));
+        if (response.achievementSuggestion != null) {
+          _messages.add(ChatMessage(
+            role: ChatRole.mentor,
+            text: 'Microvitória percebida: ${response.achievementSuggestion}.',
+          ));
+        }
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _messages.add(ChatMessage(
+          role: ChatRole.mentor,
+          supportMode: true,
+          text: 'Não consegui conectar com o servidor agora. Confira se o backend está rodando e se o endereço da API está correto.\n\nDetalhe técnico: $error',
+        ));
+      });
+    } finally {
+      if (mounted) {
+        setState(() => _isSending = false);
+      }
+    }
   }
 
   @override
@@ -62,7 +101,10 @@ class _ChatScreenState extends State<ChatScreen> {
       title: _mode,
       actions: [
         PopupMenuButton<String>(
-          onSelected: (value) => setState(() => _mode = value),
+          onSelected: (value) => setState(() {
+            _mode = value;
+            _sessionId = null;
+          }),
           itemBuilder: (_) => const [
             PopupMenuItem(value: 'Me explica devagar', child: Text('Me explica devagar')),
             PopupMenuItem(value: 'Me ajuda com a tarefa', child: Text('Me ajuda com a tarefa')),
@@ -107,6 +149,11 @@ class _ChatScreenState extends State<ChatScreen> {
               },
             ),
           ),
+          if (_isSending)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              child: LinearProgressIndicator(),
+            ),
           Container(
             color: Colors.white,
             padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
@@ -126,7 +173,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 ),
                 const SizedBox(width: 8),
                 IconButton.filled(
-                  onPressed: _send,
+                  onPressed: _isSending ? null : _send,
                   icon: const Icon(Icons.send),
                 ),
               ],
