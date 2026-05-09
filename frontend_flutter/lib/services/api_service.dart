@@ -83,6 +83,13 @@ class ApiService {
     return json['id'] as int;
   }
 
+  Future<PedagogicalResponse> getWelcomeMessage(int sessionId) async {
+    final response = await _request(
+      () => _client.post(_uri('/chat/welcome?session_id=$sessionId')),
+    );
+    return PedagogicalResponse.fromBackendJson(await _decodeJson(response));
+  }
+
   Future<PedagogicalResponse> sendPedagogicalMessage({
     required int sessionId,
     required String text,
@@ -108,7 +115,21 @@ class ApiService {
   Future<List<Map<String, dynamic>>> getTodayRoutine(int studentId) async {
     final response = await _request(() => _client.get(_uri('/routine/$studentId/today')));
     final decoded = jsonDecode(utf8.decode(response.bodyBytes));
-    return (decoded as List<dynamic>).cast<Map<String, dynamic>>();
+    if (decoded is List) {
+      return decoded.map((item) => Map<String, dynamic>.from(item as Map)).toList();
+    }
+    throw Exception('Resposta inesperada da rotina.');
+  }
+
+  Future<Map<String, dynamic>> toggleRoutineTask(int taskId, bool isCompleted) async {
+    final response = await _request(
+      () => _client.put(
+        _uri('/routine/task/$taskId/toggle'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'is_completed': isCompleted}),
+      ),
+    );
+    return _decodeJson(response);
   }
 
   Future<Map<String, dynamic>> getParentsReport(int studentId) async {
@@ -118,12 +139,12 @@ class ApiService {
 
   String _mapMode(String mode) {
     final normalized = mode.toLowerCase();
-    if (normalized.contains('travada')) return 'apoio_travamento';
-    if (normalized.contains('respirar') || normalized.contains('pausa')) return 'pausa_regulacao';
-    if (normalized.contains('prova')) return 'treino_prova';
-    if (normalized.contains('exemplo')) return 'exemplo_guiado';
-    if (normalized.contains('tarefa')) return 'tarefa_guiada';
-    if (normalized.contains('repetir')) return 'repeticao_calma';
-    return 'explicacao_guiada';
+    if (normalized.contains('travada')) return 'stuck';
+    if (normalized.contains('respirar') || normalized.contains('pausa')) return 'breathing';
+    if (normalized.contains('prova')) return 'practice_test';
+    if (normalized.contains('exemplo')) return 'give_example';
+    if (normalized.contains('tarefa')) return 'help_homework';
+    if (normalized.contains('repetir')) return 'repeat';
+    return 'explain_slow';
   }
 }
