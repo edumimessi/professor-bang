@@ -23,6 +23,7 @@ class PedagogicalResponse {
         .toList();
     final hint = json['hint']?.toString();
     final nextStep = json['next_step']?.toString();
+    final responseType = json['response_type']?.toString();
 
     return PedagogicalResponse(
       supportMode: json['is_stuck_detected'] as bool? ?? false,
@@ -30,13 +31,13 @@ class PedagogicalResponse {
       answer: json['message']?.toString() ?? '',
       steps: [
         if (hint != null && hint.trim().isNotEmpty) 'Pista: $hint',
-        if (nextStep != null && nextStep.trim().isNotEmpty) 'Próximo passo: $nextStep',
+        if (nextStep != null && nextStep.trim().isNotEmpty) 'Proximo passo: $nextStep',
       ],
       questionForStudent: options.isNotEmpty
-          ? 'Escolha uma opção para continuar: ${options.join(' | ')}'
+          ? 'Escolha uma opcao para continuar: ${options.join(' | ')}'
           : 'Quer tentar responder com suas palavras?',
       hintOptions: options,
-      achievementSuggestion: json['response_type']?.toString() == 'support'
+      achievementSuggestion: responseType == 'stuck_support'
           ? 'Pediu ajuda antes de desistir'
           : null,
     );
@@ -68,7 +69,7 @@ class PedagogicalResponse {
     if (steps.isNotEmpty) {
       if (buffer.isNotEmpty) buffer.writeln();
       for (final step in steps) {
-        buffer.writeln('• $step');
+        buffer.writeln('- $step');
       }
     }
     if (questionForStudent.trim().isNotEmpty) {
