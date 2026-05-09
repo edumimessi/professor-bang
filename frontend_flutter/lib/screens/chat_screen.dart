@@ -19,6 +19,7 @@ class _ChatScreenState extends State<ChatScreen> {
   late String _mode;
   final List<ChatMessage> _messages = [];
   bool _isSending = false;
+  bool _welcomeLoaded = false;
   int? _sessionId;
 
   @override
@@ -27,7 +28,7 @@ class _ChatScreenState extends State<ChatScreen> {
     _mode = widget.initialMode;
     _messages.add(ChatMessage(
       role: ChatRole.mentor,
-      text: 'Vamos usar o modo "$_mode". Escreva a tarefa ou a parte que ficou difícil.',
+      text: 'Vamos usar o modo "$_mode". Escreva a tarefa ou a parte que ficou dificil.',
     ));
   }
 
@@ -35,6 +36,35 @@ class _ChatScreenState extends State<ChatScreen> {
   void dispose() {
     _controller.dispose();
     super.dispose();
+  }
+
+  String _currentSubject(AppState appState) {
+    final subject = appState.profile.difficultSubjects.split(',').first.trim();
+    return subject.isEmpty ? 'geral' : subject;
+  }
+
+  Future<int> _ensureSession(AppState appState) async {
+    if (_sessionId != null) return _sessionId!;
+    final sessionId = await appState.startStudySession(
+      subject: _currentSubject(appState),
+      studyMode: _mode,
+    );
+    _sessionId = sessionId;
+    return sessionId;
+  }
+
+  Future<void> _loadWelcome(AppState appState, int sessionId) async {
+    if (_welcomeLoaded) return;
+    final welcome = await appState.api.getWelcomeMessage(sessionId);
+    _welcomeLoaded = true;
+    if (!mounted) return;
+    setState(() {
+      _messages.add(ChatMessage(
+        role: ChatRole.mentor,
+        text: welcome.toReadableText(),
+        supportMode: welcome.supportMode,
+      ));
+    });
   }
 
   Future<void> _send() async {
@@ -49,20 +79,14 @@ class _ChatScreenState extends State<ChatScreen> {
 
     try {
       final appState = context.read<AppState>();
-      _sessionId ??= await appState.startStudySession(
-        subject: appState.profile.difficultSubjects.split(',').first.trim().isEmpty
-            ? 'geral'
-            : appState.profile.difficultSubjects.split(',').first.trim(),
-        studyMode: _mode,
-      );
+      final sessionId = await _ensureSession(appState);
+      await _loadWelcome(appState, sessionId);
 
       final response = await appState.api.sendPedagogicalMessage(
-        sessionId: _sessionId!,
+        sessionId: sessionId,
         text: text,
         mode: _mode,
-        subject: appState.profile.difficultSubjects.split(',').first.trim().isEmpty
-            ? 'geral'
-            : appState.profile.difficultSubjects.split(',').first.trim(),
+        subject: _currentSubject(appState),
       );
 
       if (!mounted) return;
@@ -75,7 +99,7 @@ class _ChatScreenState extends State<ChatScreen> {
         if (response.achievementSuggestion != null) {
           _messages.add(ChatMessage(
             role: ChatRole.mentor,
-            text: 'Microvitória percebida: ${response.achievementSuggestion}.',
+            text: 'Microvitoria percebida: ${response.achievementSuggestion}.',
           ));
         }
       });
@@ -85,7 +109,7 @@ class _ChatScreenState extends State<ChatScreen> {
         _messages.add(ChatMessage(
           role: ChatRole.mentor,
           supportMode: true,
-          text: 'Não consegui conectar com o servidor agora. Confira se o backend está rodando e se o endereço da API está correto.\n\nDetalhe técnico: $error',
+          text: 'Nao consegui conectar com o servidor agora. Confira se o backend esta rodando e se o endereco da API esta correto.\n\nDetalhe tecnico: $error',
         ));
       });
     } finally {
@@ -104,6 +128,7 @@ class _ChatScreenState extends State<ChatScreen> {
           onSelected: (value) => setState(() {
             _mode = value;
             _sessionId = null;
+            _welcomeLoaded = false;
           }),
           itemBuilder: (_) => const [
             PopupMenuItem(value: 'Me explica devagar', child: Text('Me explica devagar')),
