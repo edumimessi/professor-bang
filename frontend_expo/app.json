@@ -1,0 +1,27 @@
+{
+  "expo": {
+    "name": "Professor Bang",
+    "slug": "professor-bang",
+    "owner": "edumimessi",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "scheme": "professorbang",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.edumimessi.professorbang"
+    },
+    "android": {
+      "package": "com.edumimessi.professorbang",
+      "adaptiveIcon": {
+        "backgroundColor": "#F7F3EA"
+      }
+    },
+    "web": {
+      "bundler": "metro"
+    }
+  }
+}
