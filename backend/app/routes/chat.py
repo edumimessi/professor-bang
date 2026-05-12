@@ -1,19 +1,20 @@
 # backend/app/routes/chat.py
 #
-# Endpoints do chat pedagógico — coração do Professor Bang.
-# Recebe mensagem da aluna, gera resposta via PedagogyEngine, salva no banco.
+# Endpoints do chat pedagogico - coracao do Professor Bang.
+# Recebe mensagem da aluna, gera resposta via OpenAI quando configurado,
+# e usa o motor local como fallback.
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
-from datetime import datetime, timezone
 
 from ..database import get_db
 from ..models import StudySession, StudentProfile, Message, EmotionalCheckin
 from ..schemas import ChatRequest, ChatResponse, MessageResponse
 from ..services.ai_pedagogy import pedagogy_engine
+from ..services.openai_pedagogy import generate_openai_response
 
-router = APIRouter(prefix="/chat", tags=["Chat Pedagógico"])
+router = APIRouter(prefix="/chat", tags=["Chat Pedagogico"])
 
 
 def _msg_to_response(m: Message) -> MessageResponse:
@@ -28,19 +29,28 @@ def _msg_to_response(m: Message) -> MessageResponse:
     )
 
 
-# ─────────────────────────────────────────────────────────────
-# POST /chat/welcome
-# ─────────────────────────────────────────────────────────────
+def _chat_response(response) -> ChatResponse:
+    return ChatResponse(
+        message=response.message,
+        tone=response.tone,
+        response_type=response.response_type,
+        is_stuck_detected=response.is_stuck_detected,
+        options=response.options,
+        hint=response.hint,
+        next_step=response.next_step,
+        should_check_in=response.should_check_in,
+    )
+
 
 @router.post("/welcome", response_model=ChatResponse)
 def get_welcome_message(
     session_id: int,
     db: Session = Depends(get_db),
 ):
-    """Gera e salva a mensagem de boas-vindas ao iniciar sessão."""
+    """Gera e salva a mensagem de boas-vindas ao iniciar sessao."""
     session = db.query(StudySession).filter(StudySession.id == session_id).first()
     if not session:
-        raise HTTPException(status_code=404, detail="Sessão não encontrada.")
+        raise HTTPException(status_code=404, detail="Sessao nao encontrada.")
 
     student = db.query(StudentProfile).filter(StudentProfile.id == session.student_id).first()
     interests = [v.strip() for v in (student.interests or "").split(",") if v.strip()]
@@ -52,7 +62,6 @@ def get_welcome_message(
         interests=interests,
     )
 
-    # Salva no banco
     msg = Message(
         session_id=session_id,
         content=response.message,
@@ -63,39 +72,40 @@ def get_welcome_message(
     db.add(msg)
     db.commit()
 
-    return ChatResponse(
-        message=response.message,
-        tone=response.tone,
-        response_type=response.response_type,
-        is_stuck_detected=False,
-        options=response.options,
-        hint=response.hint,
-        next_step=response.next_step,
-        should_check_in=response.should_check_in,
-    )
+    return _chat_response(response)
 
-
-# ─────────────────────────────────────────────────────────────
-# POST /chat/message
-# ─────────────────────────────────────────────────────────────
 
 @router.post("/message", response_model=ChatResponse)
 def send_message(data: ChatRequest, db: Session = Depends(get_db)):
     """
-    Recebe mensagem da aluna, gera resposta pedagógica e salva ambas.
-    Este é o endpoint principal do chat.
+    Recebe mensagem da aluna, gera resposta pedagogica e salva ambas.
+    Usa OpenAI quando OPENAI_API_KEY estiver configurada; caso contrario,
+    usa o motor local de regras.
     """
     session = db.query(StudySession).filter(StudySession.id == data.session_id).first()
     if not session:
-        raise HTTPException(status_code=404, detail="Sessão não encontrada.")
+        raise HTTPException(status_code=404, detail="Sessao nao encontrada.")
 
     student = db.query(StudentProfile).filter(StudentProfile.id == session.student_id).first()
     interests = [v.strip() for v in (student.interests or "").split(",") if v.strip()]
 
-    # Conta mensagens anteriores para contexto
     msg_count = db.query(Message).filter(Message.session_id == data.session_id).count()
+    previous_messages = (
+        db.query(Message)
+        .filter(Message.session_id == data.session_id)
+        .order_by(Message.created_at.desc())
+        .limit(8)
+        .all()
+    )
+    previous_messages = list(reversed(previous_messages))
+    recent_messages = [
+        {
+            "role": "assistant" if message.is_from_ai else "student",
+            "content": message.content,
+        }
+        for message in previous_messages
+    ]
 
-    # Salva mensagem da aluna
     student_msg = Message(
         session_id=data.session_id,
         content=data.message,
@@ -105,9 +115,7 @@ def send_message(data: ChatRequest, db: Session = Depends(get_db)):
     )
     db.add(student_msg)
 
-    # Gera resposta pedagógica
-    ai_response = pedagogy_engine.generate_response(
-        session_id=data.session_id,
+    ai_response = generate_openai_response(
         student_message=data.message,
         study_mode=data.study_mode,
         subject=data.subject,
@@ -115,13 +123,24 @@ def send_message(data: ChatRequest, db: Session = Depends(get_db)):
         interests=interests,
         reading_level=student.reading_level or "medio",
         message_count=msg_count,
+        recent_messages=recent_messages,
     )
 
-    # Atualiza contadores da sessão se travamento detectado
+    if ai_response is None:
+        ai_response = pedagogy_engine.generate_response(
+            session_id=data.session_id,
+            student_message=data.message,
+            study_mode=data.study_mode,
+            subject=data.subject,
+            student_name=student.name,
+            interests=interests,
+            reading_level=student.reading_level or "medio",
+            message_count=msg_count,
+        )
+
     if ai_response.is_stuck_detected:
         session.stuck_count = (session.stuck_count or 0) + 1
 
-    # Salva resposta da IA
     ai_msg = Message(
         session_id=data.session_id,
         content=ai_response.message,
@@ -132,25 +151,12 @@ def send_message(data: ChatRequest, db: Session = Depends(get_db)):
     db.add(ai_msg)
     db.commit()
 
-    return ChatResponse(
-        message=ai_response.message,
-        tone=ai_response.tone,
-        response_type=ai_response.response_type,
-        is_stuck_detected=ai_response.is_stuck_detected,
-        options=ai_response.options,
-        hint=ai_response.hint,
-        next_step=ai_response.next_step,
-        should_check_in=ai_response.should_check_in,
-    )
+    return _chat_response(ai_response)
 
-
-# ─────────────────────────────────────────────────────────────
-# GET /chat/{session_id}/history
-# ─────────────────────────────────────────────────────────────
 
 @router.get("/{session_id}/history", response_model=List[MessageResponse])
 def get_chat_history(session_id: int, db: Session = Depends(get_db)):
-    """Retorna histórico completo de mensagens da sessão."""
+    """Retorna historico completo de mensagens da sessao."""
     messages = (
         db.query(Message)
         .filter(Message.session_id == session_id)
@@ -160,10 +166,6 @@ def get_chat_history(session_id: int, db: Session = Depends(get_db)):
     return [_msg_to_response(m) for m in messages]
 
 
-# ─────────────────────────────────────────────────────────────
-# POST /chat/{session_id}/checkin
-# ─────────────────────────────────────────────────────────────
-
 @router.post("/{session_id}/checkin", status_code=201)
 def save_emotional_checkin(
     session_id: int,
@@ -171,10 +173,10 @@ def save_emotional_checkin(
     intensity: int = 3,
     db: Session = Depends(get_db),
 ):
-    """Salva check-in emocional durante a sessão."""
+    """Salva check-in emocional durante a sessao."""
     session = db.query(StudySession).filter(StudySession.id == session_id).first()
     if not session:
-        raise HTTPException(status_code=404, detail="Sessão não encontrada.")
+        raise HTTPException(status_code=404, detail="Sessao nao encontrada.")
 
     checkin = EmotionalCheckin(
         student_id=session.student_id,
@@ -184,4 +186,4 @@ def save_emotional_checkin(
     )
     db.add(checkin)
     db.commit()
-    return {"success": True, "message": "Check-in salvo com carinho 💙"}
+    return {"success": True, "message": "Check-in salvo com carinho"}
