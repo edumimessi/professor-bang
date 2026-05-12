@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 
 class AppTheme {
-  static const Color nightBlue = Color(0xFF0B1B3F);
-  static const Color calmBlue = Color(0xFF1E5AA8);
-  static const Color softStar = Color(0xFFFFF4C2);
-  static const Color cloudWhite = Color(0xFFF8FBFF);
+  static const Color nightBlue = Color(0xFF17283A);
+  static const Color calmBlue = Color(0xFF3A6C7E);
+  static const Color moss = Color(0xFF6C7A45);
+  static const Color softStar = Color(0xFFF4DFA1);
+  static const Color cloudWhite = Color(0xFFF8F5EF);
+  static const Color ink = Color(0xFF20272E);
+  static const Color muted = Color(0xFF66717A);
 
   static ThemeData get lightTheme {
     return ThemeData(
@@ -17,19 +20,34 @@ class AppTheme {
       scaffoldBackgroundColor: cloudWhite,
       useMaterial3: true,
       fontFamily: 'Roboto',
-      elevatedButtonTheme: ElevatedButtonThemeData(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: calmBlue,
-          foregroundColor: Colors.white,
-          minimumSize: const Size.fromHeight(56),
-          textStyle: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      appBarTheme: const AppBarTheme(
+        centerTitle: false,
+        elevation: 0,
+        backgroundColor: cloudWhite,
+        foregroundColor: nightBlue,
+        titleTextStyle: TextStyle(
+          color: nightBlue,
+          fontSize: 20,
+          fontWeight: FontWeight.w800,
         ),
       ),
-      cardTheme: CardTheme(
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: nightBlue,
+          foregroundColor: Colors.white,
+          minimumSize: const Size.fromHeight(54),
+          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      ),
+      cardTheme: CardThemeData(
         color: Colors.white,
-        elevation: 1,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+        elevation: 0,
+        margin: EdgeInsets.zero,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+          side: const BorderSide(color: Color(0xFFE2DBCF)),
+        ),
       ),
     );
   }

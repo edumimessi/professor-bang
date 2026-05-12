@@ -19,19 +19,10 @@ class CalmScaffold extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: Text(title),
-        backgroundColor: AppTheme.nightBlue,
-        foregroundColor: Colors.white,
         actions: actions,
       ),
       body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [AppTheme.nightBlue, AppTheme.cloudWhite],
-            stops: [0.0, 0.38],
-          ),
-        ),
+        color: AppTheme.cloudWhite,
         child: SafeArea(child: child),
       ),
     );
