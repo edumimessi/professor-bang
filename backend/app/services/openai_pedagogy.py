@@ -21,24 +21,14 @@ PEDAGOGY_SCHEMA: dict[str, Any] = {
     "type": "object",
     "additionalProperties": False,
     "properties": {
-        "message": {
-            "type": "string",
-            "description": "Short, concrete teaching response in Brazilian Portuguese.",
-        },
-        "tone": {
-            "type": "string",
-            "enum": ["acolhedor", "calmo", "animado", "apoio"],
-        },
+        "message": {"type": "string"},
+        "tone": {"type": "string", "enum": ["acolhedor", "calmo", "animado", "apoio"]},
         "response_type": {
             "type": "string",
             "enum": ["question", "hint", "explanation", "encouragement", "stuck_support", "breathing"],
         },
         "is_stuck_detected": {"type": "boolean"},
-        "options": {
-            "type": "array",
-            "items": {"type": "string"},
-            "maxItems": 3,
-        },
+        "options": {"type": "array", "items": {"type": "string"}, "maxItems": 3},
         "hint": {"type": "string"},
         "next_step": {"type": "string"},
         "should_check_in": {"type": "boolean"},
@@ -63,9 +53,10 @@ Responda sempre em portugues brasileiro, com frases curtas e concretas.
 
 Regras pedagogicas obrigatorias:
 - Ensine de verdade: explique o proximo passo, nao fique apenas acolhendo.
+- Use o historico recente para entender pedidos como "um exemplo" ou "faz comigo".
 - Para matematica, mostre uma etapa por vez e use exemplos concretos.
-- Se a aluna pedir exemplo, de um exemplo trabalhado.
 - Se houver uma conta explicita, resolva de forma guiada e mostre o raciocinio essencial.
+- Se a aluna pedir exemplo, de um exemplo trabalhado relacionado ao assunto atual.
 - Nao entregue uma lista enorme. Use no maximo 4 passos curtos.
 - Termine com uma pergunta simples para a aluna tentar participar.
 - Seja acolhedor, mas sem repetir sempre a mesma frase.
@@ -89,6 +80,7 @@ def _input_text(
     interests: List[str],
     reading_level: str,
     message_count: int,
+    recent_messages: List[dict[str, str]],
 ) -> str:
     return json.dumps(
         {
@@ -98,6 +90,7 @@ def _input_text(
             "reading_level": reading_level,
             "interests": interests,
             "message_count": message_count,
+            "recent_messages": recent_messages[-8:],
             "student_message": student_message,
         },
         ensure_ascii=False,
@@ -130,6 +123,7 @@ def generate_openai_response(
     interests: List[str],
     reading_level: str = "medio",
     message_count: int = 0,
+    recent_messages: Optional[List[dict[str, str]]] = None,
 ) -> Optional[PedagogicalResponse]:
     """Generate a pedagogical response with OpenAI, or return None on fallback."""
     api_key = os.getenv("OPENAI_API_KEY")
@@ -148,6 +142,7 @@ def generate_openai_response(
             interests=interests,
             reading_level=reading_level,
             message_count=message_count,
+            recent_messages=recent_messages or [],
         ),
         "max_output_tokens": 700,
         "text": {
