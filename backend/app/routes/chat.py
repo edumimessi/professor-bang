@@ -1,7 +1,7 @@
 # backend/app/routes/chat.py
 #
 # Endpoints do chat pedagogico - coracao do Professor Bang.
-# Recebe mensagem da aluna, gera resposta via OpenAI quando configurado,
+# Recebe mensagem da aluna, gera resposta via Gemini/OpenAI quando configurado,
 # e usa o motor local como fallback.
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -12,6 +12,7 @@ from ..database import get_db
 from ..models import StudySession, StudentProfile, Message, EmotionalCheckin
 from ..schemas import ChatRequest, ChatResponse, MessageResponse
 from ..services.ai_pedagogy import pedagogy_engine
+from ..services.gemini_pedagogy import generate_gemini_response
 from ..services.openai_pedagogy import generate_openai_response
 
 router = APIRouter(prefix="/chat", tags=["Chat Pedagogico"])
@@ -79,8 +80,8 @@ def get_welcome_message(
 def send_message(data: ChatRequest, db: Session = Depends(get_db)):
     """
     Recebe mensagem da aluna, gera resposta pedagogica e salva ambas.
-    Usa OpenAI quando OPENAI_API_KEY estiver configurada; caso contrario,
-    usa o motor local de regras.
+    Usa Gemini quando GEMINI_API_KEY estiver configurada. Se falhar, tenta
+    OpenAI. Se tambem falhar, usa o motor local de regras.
     """
     session = db.query(StudySession).filter(StudySession.id == data.session_id).first()
     if not session:
@@ -115,7 +116,7 @@ def send_message(data: ChatRequest, db: Session = Depends(get_db)):
     )
     db.add(student_msg)
 
-    ai_response = generate_openai_response(
+    ai_response = generate_gemini_response(
         student_message=data.message,
         study_mode=data.study_mode,
         subject=data.subject,
@@ -125,6 +126,18 @@ def send_message(data: ChatRequest, db: Session = Depends(get_db)):
         message_count=msg_count,
         recent_messages=recent_messages,
     )
+
+    if ai_response is None:
+        ai_response = generate_openai_response(
+            student_message=data.message,
+            study_mode=data.study_mode,
+            subject=data.subject,
+            student_name=student.name,
+            interests=interests,
+            reading_level=student.reading_level or "medio",
+            message_count=msg_count,
+            recent_messages=recent_messages,
+        )
 
     if ai_response is None:
         ai_response = pedagogy_engine.generate_response(
