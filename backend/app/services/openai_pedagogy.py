@@ -15,7 +15,7 @@ import httpx
 from app.services.ai_pedagogy import PedagogicalResponse
 
 OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
-DEFAULT_MODEL = "gpt-5-mini"
+DEFAULT_MODEL = "gpt-4o-mini"
 
 PEDAGOGY_SCHEMA: dict[str, Any] = {
     "type": "object",
