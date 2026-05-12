@@ -97,6 +97,19 @@ def _input_text(
     )
 
 
+def _extract_output_text(result: dict[str, Any]) -> str:
+    """Extract text from raw Responses API JSON or SDK-like response payloads."""
+    if isinstance(result.get("output_text"), str):
+        return result["output_text"]
+
+    chunks: list[str] = []
+    for item in result.get("output", []) or []:
+        for content in item.get("content", []) or []:
+            if content.get("type") == "output_text" and isinstance(content.get("text"), str):
+                chunks.append(content["text"])
+    return "".join(chunks)
+
+
 def _coerce_response(data: dict[str, Any]) -> PedagogicalResponse:
     options = data.get("options")
     if not isinstance(options, list):
@@ -168,7 +181,7 @@ def generate_openai_response(
             response.raise_for_status()
             result = response.json()
 
-        output_text = result.get("output_text") or ""
+        output_text = _extract_output_text(result)
         if not output_text:
             return None
 
